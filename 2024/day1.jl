@@ -21,7 +21,7 @@ function part1()
     S1 = sort(L1)
     S2 = sort(L2)
 
-    diffs = map(((e1, e2),) -> abs(e2 - e1), zip(S1, S2))
+    diffs = abs.(S2 - S1)
     score = sum(diffs)
     return score
 end
@@ -29,7 +29,7 @@ end
 function part2()
     L1, L2 = parse_input("./data1.txt")
     O2 = counter(L2)
-    score = map((e1) -> e1 * O2[e1], L1)
+    score = L1 .* getindex.((O2,), L1)
     score = sum(score)
     return score
 end
