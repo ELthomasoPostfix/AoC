@@ -51,15 +51,18 @@ function find_error_locations(datavec::Array)
     # For an incr (decr) series, all decr (incr) are errors.
     gte0 = (val) -> val >= 0
     increasing = @. !gte0(diffs)
+
     lt0 = (val) -> val <= 0
     decreasing = @. !lt0(diffs)
 
-    # If the series is monotonically incr (decr), then default to no errors.
-    # FIXME: Commenting these two lines solves everything???
-    increasing = !all(increasing) .& increasing
-    decreasing = !all(decreasing) .& decreasing
+    # If the series is monotonically incr (decr), then default to no errors
+    # according to this property.
+    is_monotonic::Bool = all(increasing) | all(decreasing)
+    increasing = !is_monotonic .& increasing
+    decreasing = !is_monotonic .& decreasing
 
-    # If the series is monotonically increasing, then default to no errors.
+    # Cyclic left shift of the list elements.
+    # This breaks if the final element violates monotonicity?
     increasing = vcat(increasing[end], increasing[1:(end-1)])
     increasing = vcat(decreasing[end], decreasing[1:(end-1)])
 
@@ -91,15 +94,11 @@ function part2()
         error_idexes = find_error_locations(datavec)
         issafe = length(error_idexes) == 0
 
-        printable = copy(report)
-        printable[error_idexes] = fill(999, length(error_idexes))
-        println(printable)
         for idx in error_idexes
             datavec = report[.!in.(1:end,([idx],))]
             error_indexes_corrected = find_error_locations(datavec)
             issafe = length(error_indexes_corrected) == 0
             if issafe
-                println("  $datavec")
                 break
             end
         end
@@ -108,7 +107,6 @@ function part2()
         safe[idx1] = issafe
     end
 
-    println(safe)
     result = sum(safe)
     return result
 end
