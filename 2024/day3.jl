@@ -7,9 +7,7 @@ function parse_input(file_path::String)
     return string(readlines(file_path)...)
 end
 
-function part1()
-    data = parse_input("./data3.txt")
-
+function solve(data::String)
     # Sum each "mul(X,Y)" match
     regex = r"mul\(([0-9]+),([0-9]+)\)"
     total::Int64 = 0    # Require Int64 to prevent overflow!
@@ -18,7 +16,13 @@ function part1()
         total += parse(Int64, larg) * parse(Int64, rarg)
     end
 
-    result = total
+    return total
+end
+
+function part1()
+    data = parse_input("./data3.txt")
+
+    result = solve(data)
     return result
 end
 
@@ -31,15 +35,7 @@ function part2()
     regex = r"don't\(\).+?((do\(\))|$)"
     data = replace(data, regex => s"")
 
-    # Sum each "mul(X,Y)" match
-    regex = r"mul\(([0-9]+),([0-9]+)\)"
-    total::Int64 = 0    # Require Int64 to prevent overflow!
-    for m in eachmatch(regex, data)
-        larg, rarg = m.captures
-        total += parse(Int64, larg) * parse(Int64, rarg)
-    end
-
-    result = total
+    result = solve(data)
     return result
 end
 
