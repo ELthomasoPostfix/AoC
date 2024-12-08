@@ -86,9 +86,9 @@ function part1()
 
         x, y = guard
         u, v = target
-        row_ran = min(u,x):max(u,x)
-        col_ran = min(v,y):max(v,y)
-        grid[col_ran, row_ran] .= CHR_SEEN
+        col_ran = min(u,x):max(u,x)
+        row_ran = min(v,y):max(v,y)
+        grid[row_ran, col_ran] .= CHR_SEEN
 
         guard = target
     end
