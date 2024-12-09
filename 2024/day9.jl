@@ -7,14 +7,35 @@ function parse_input(file_path::String)
     return readlines(file_path)[1]
 end
 
+"""Compute a partial checksum. Is constrained by free space available.
+
+    @param[in]         k The file ID
+    @param[in,out]   spp The "stack pointer", which is the current index
+    @param[in,out]     b The file size pointer, the number of blocks to allocate
+    @param[in,out] freep The free space size pointer.
+    @return The partial checksum
+"""
 function malloc!(k::Int64, spp::Ref{Int64}, b::Ref{Int64}, freep::Ref{Int64})
     bmin = min(freep[], b[])
-    m = bmin - 1
+
+    freep[] = freep[] - bmin[]
+    b[] = b[] - bmin[]
+
+    return mallocu!(k, spp, bmin)
+end
+
+"""Compute a partial checksum. Does not consider free space available.
+
+    @param[in]       k The file ID
+    @param[in,out] spp The "stack pointer", which is the current index
+    @param[in]       b The file size, the number of blocks to allocate
+    @return The partial checksum
+"""
+function mallocu!(k::Int64, spp::Ref{Int64}, b::Int64)
+    m = b - 1
     n = spp[]
 
-    freep[] = freep[] - bmin
-    spp[] = spp[] + bmin
-    b[] = b[] - bmin
+    spp[] = spp[] + b
 
     #=
             kn + k(n+1) + ... + k(n+m)
@@ -100,9 +121,60 @@ end
 function part2()
     data = parse_input("./data9.txt")
 
-    result = data
+    total::Int64 = 0
+
+    # File list format is: [(ID0, size0), ..., (IDN, sizeN)]
+    files = data[1:2:length(data)]
+    files = map(((idx, bsize),) -> (idx-1, parse(Int64, bsize)), enumerate(files))
+    # Free block list format is: [(size0, []), ..., (sizeM, [])]
+    # where the list of the free space contains moved files.
+    frees = data[2:2:length(data)]
+    frees = map(((idx, bsize),) -> (idx, parse(Int64, bsize), []), enumerate(frees))
+    # There is always one less free space than files. Padd with a dummy space.
+    push!(frees, (0, 0, []))
+
+    for (fidx, file) in enumerate(reverse(files))
+        fidx = length(files) - fidx + 1 # Compensate the reverse
+        fid, filesize = file
+        for (midx, free) in enumerate(frees)
+            mid, freesize, moved = free
+            # Files may only be moved to free space on their left.
+            if mid > fid
+                break
+            # Files must be moved in their entirety; there must be enoug room.
+            elseif freesize < filesize
+                continue
+            end
+
+            # If a valid, free space is found, then move the file and quit.
+            # Setting id=0 converts the file to whitespace.
+            # The filesize is needed for later tallying.
+            files[fidx] = (0, filesize)
+            push!(moved, file)
+            frees[midx] = (mid, freesize - filesize, moved)
+            break
+        end
+    end
+
+    @assert length(files) == length(frees) "Unequal lengths, zip will malfunction."
+    spp = Ref(0) # "stack pointer"
+    for (file, free) in zip(files, frees)
+        fid, fsize = file
+        _, msize, moved = free
+
+        # The file precedes the free space.
+        total += mallocu!(fid, spp, fsize)
+        # The free space was filled left-to-right with files.
+        for mfile in moved
+            mfid, mfsize = mfile
+            total += mallocu!(mfid, spp, mfsize)
+        end
+        mallocu!(0, spp, msize) # Only moves the "stack pointer'
+    end
+
+    result = total
     return result
 end
 
 println(part1())
-# println(part2())
+println(part2())
