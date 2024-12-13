@@ -36,11 +36,6 @@ function neighbours(r, c)
     return [(r+offr, c+offc) for (offc, offr) in URDL]
 end
 
-"""The possibly out-of-bounds neighbour (row, col) coordinates."""
-function diagonals(r, c)
-    return [(r+offr, c+offc) for (offc, offr) in URDLD]
-end
-
 """Flatten a vector of vectors."""
 flatten(v) = reduce(vcat, v)
 
@@ -55,26 +50,15 @@ function perimeter(pos::Tuple{Int64, Int64}, fields::Matrix{Char}, neighbouring)
     ])
 end
 
-"""Find all coordinates of fields directly on the perimeter."""
-function shape_sides(id, idgrid)
-    idxr(i, v) = (i, v)
-    idxc(i, v) = (v, i)
-    methods = [
-        (findfirst, eachcol, idxc), # TOP
-        (findlast, eachrow, idxr),  # RIGHT
-        (findlast, eachcol, idxc),  # BOTTOM
-        (findfirst, eachrow, idxr), # LEFT
-    ]
-    return[
-        filter(e -> !(nothing in e),
-            [tupler(idx, finder(==(id), slice))
-             for (idx, slice) in enumerate(slicer(idgrid))])
-        for (finder, slicer, tupler) in methods
-    ]
-end
+"""Compute the number of faces of the region with the given id.
 
-"""Compute the number of faces of the region with the given id."""
-function faces22222(id, idgrid)
+    Scan the id grid for a single id. Do this for every column
+    and every row, plus the one column or row just out of bounds.
+    In doing so, add 1 face for every cell to the left/right
+    (top/bottom for rows) where you transition from a different id
+    in the previous cell to the chosen id in this cell.
+"""
+function faces(id, idgrid)
     h, w = size(idgrid)
     faces::Int64 = 0
     lseen::Bool = false
@@ -195,9 +179,10 @@ function part2()
         id += 1
     end
 
+    # FIXME: This just overwrites the value computed with part 1. It works though ...
     for rid in keys(regions)
-        faces = faces22222(rid, idgrid)
-        regions[rid] = (regions[rid][1], faces)
+        nrfaces = faces(rid, idgrid)
+        regions[rid] = (regions[rid][1], nrfaces)
     end
 
     result = sum([*(regions[id]...) for id in keys(regions)])
