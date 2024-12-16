@@ -43,52 +43,77 @@ function parse_input(file_path::String)
     return maze, start, stop
 end
 
-function solve(start::CartesianIndex, stop::CartesianIndex, heading::Int64,
-               maze::Matrix{Char}, visited::Matrix{Bool})
-    pqueue = PriorityQueue{Tuple{CartesianIndex, Int64}, Int64}()
-    enqueue!(pqueue, (start, heading), 0)
+function solve(data)
+    maze, start, finish = data
+    # For each cell, the lowest priority that has visited that cell until now.
+    visited::Matrix{Int64} = falses(size(maze)...)
+    fill!(visited, typemax(Int64))
+    # The initial heading is East
+    heading::Int64 = 1
 
-    while true
+
+    pqueue = PriorityQueue{Tuple{CartesianIndex, Int64, Set}, Int64}()
+    enqueue!(pqueue, (start, heading, Set([start])), 0)
+    visited[start] = 0
+
+    # The optimal score, which is the only acceptable score for any path.
+    best_score::Union{Int64, Nothing} = nothing
+    # The set of all positions along all optimal paths.
+    best_spots::Set{CartesianIndex} = Set{CartesianIndex}()
+    while length(pqueue) > 0
         key, val = peek(pqueue)
         delete!(pqueue, key)
-        pos, heading = key
+        pos, heading, path = key
 
-        visited[pos] = true
-
-        if pos == stop
-            return val
+        # Quit once the next intermediate lowest score exceeds
+        # the optimal score.
+        if best_score !== nothing && val > best_score
+            break
         end
 
+        if pos == finish
+            if best_score === nothing
+                best_score = val
+            end
+            best_spots = union(best_spots, path)
+            continue
+        end
+
+        # Always perform a turn + step at the same time.
         for (offset, cost) in [(0, 1), (3, 1001), (1, 1001), (2, 2001)]
             heading_next = cycle(heading + offset)
             next = pos + ESWN[heading_next]
-            key = (next, heading_next)
             priority = val + cost
-            if !visited[next] && (maze[next] == CHR_FREE)
-                visited[next] = true
+            # Avoid paths that can never attain the best score.
+            if best_score !== nothing && priority > best_score
+                continue
+            end
+
+            # Give one turn worth of tolerance.
+            # If the visited location is a crossroads or T intersection, then
+            # some paths can cross it without turning while others must turn.
+            # Do max to counteract integer overflows.
+            threshold::Int64 = max(visited[next], visited[next] + 1000)
+            if (priority <= threshold) && maze[next] == CHR_FREE
+                visited[next] = min(visited[next], priority)
+                key = (next, heading_next, union(path, [next]))
                 enqueue!(pqueue, key, priority)
             end
         end
     end
 
-    @assert false "Should not reach here."
+    return best_score, length(best_spots)
 end
 
 function part1()
     data = parse_input("./data16.txt")
-
-    maze, start, stop = data
-    visited::Matrix{Bool} = falses(size(maze)...)
-
-    return solve(start, stop, 1, maze, visited)
+    return solve(data)[1]
 end
 
 function part2()
     data = parse_input("./data16.txt")
-
-    result = data
-    return result
+    return solve(data)[2]
 end
 
 println(part1())
-# println(part2())
+println(part2())
