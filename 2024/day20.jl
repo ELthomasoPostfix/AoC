@@ -34,7 +34,7 @@ function outbounds(pos, matrix)::Bool
     return !((1 <= pos[1] <= h) && (1 <= pos[2] <= w))
 end
 
-function solve(maze, start, stop)
+function solve_pathing(maze, start, stop)
     maze = copy(maze)
 
     scores::Matrix{Int64} = Matrix{Int64}(undef, size(maze)...)
@@ -67,76 +67,85 @@ function solve(maze, start, stop)
     return scores
 end
 
-function part1()
-    data = parse_input("./data20.txt")
+function reachable(
+        steps::Int64, pos::CartesianIndex, save_min:: Int64,
+        shortcuts::Dict{Int64, Int64},
+        maze::Matrix{Bool},
+        scores::Matrix{Int64})::Nothing
+    @assert steps > 0 "Must take at least one step."
 
-    maze, start, stop = data
-    for row in eachrow(data[1])
-        println(string([(r ? '#' : '.') for r in row]...))
+    for step in 1:steps
+        # The cardinal cells at distance step from the starting cell.
+        starts = [
+            pos + CartesianIndex(0, -step),
+            pos + CartesianIndex(-step, 0),
+            pos + CartesianIndex(0, step),
+            pos + CartesianIndex(step, 0),
+        ]
+        #=
+               O
+              OXO
+             OXOXO
+            OXOSOXO
+             OXOXO
+              OXO
+               O
+        =#
+        # To do a single loop at distance step around the starting cell, ...
+        for (idx, start) in enumerate(starts)
+            next = starts[idx%length(starts)+1]
+            move = CartesianIndex(sign(next[1]-start[1]),
+                                  sign(next[2]-start[2]))
+            # ... we linearly move from starting point to starting point.
+            reachable = start
+            while reachable != next
+                reachable = reachable + move
+                if outbounds(reachable, scores) || maze[reachable] || pos == reachable
+                    continue
+                end
+                # You must take X steps to perform the shortcut, so +X!
+                save = scores[reachable] - (scores[pos] + step)
+                if save < save_min
+                    continue
+                end
+                shortcuts[save] = 1 + get(shortcuts, save, 0)
+            end
+        end
     end
-    println()
-    
-    scores = solve(maze, start, stop)
-    for row in eachrow(scores)
-        println(string([(r == -1 ? "     " : rpad(r, 5, ' ')) for r in row]...))
-    end
-    println()
+end
 
-    shortcuts::Dict = Dict()
-    save_min::Int64 = 100
-    neighbours(pos) = [pos + move for move in ESWN]
-    for (ridx, row) in enumerate(eachrow(scores))
-        for (cidx, score) in enumerate(row)
-            pos = CartesianIndex(ridx, cidx)
+function solve(maze, start, stop, cheat_steps::Int64, save_min::Int64)
+    scores = solve_pathing(maze, start, stop)
+
+    # A mapping: save_amount => #occurrences
+    # i.e. how many cheats are there that save the given amount of steps.
+    shortcuts::Dict{Int64, Int64} = Dict()
+    h, w = size(scores)
+    for row in 1:h
+        for col in 1:w
+            pos = CartesianIndex(row, col)
             # We can only start a shortcut from non-wall cell.
             if maze[pos]
                 continue
             end
-            for adjacent in neighbours(pos)
-                # Shortcuts must pass through a wall adjacent to the position.
-                if !maze[adjacent]
-                    continue
-                end
-                # The neighbours of the wall are the actually reachable cells.
-                for distant in neighbours(adjacent)
-                    if !outbounds(distant, maze) && pos != distant
-                        # You must take two steps to perform the shortcut, so +2!
-                        save = scores[distant] - (scores[pos] + 2)
-                        if save < save_min
-                            continue
-                        end
-                        shortcuts[save] = 1 + get(shortcuts, save, 0)
-                    end
-                end
-            end
+            reachable(cheat_steps, pos, save_min, shortcuts, maze, scores)
         end
     end
-
-    for (k, v) in sort(collect(pairs(shortcuts)))
-        println(rpad(v, 3, ' ') * " that save " * rpad(k, 3, ' '))
-    end
-    println()
 
     return sum(values(shortcuts))
 end
 
+function part1()
+    data = parse_input("./data20.txt")
+    maze, start, stop = data
+    return solve(maze, start, stop, 2, 100)
+end
+
 function part2()
     data = parse_input("./data20.txt")
-
-    # Brute force the simulation, because the shortest path finding
-    # is plenty efficient for this use case.
-    for sim_time in eachindex(data)
-        if solve(data, (71,71), sim_time) == -1
-            coords = data[sim_time]
-            row, col = coords[1], coords[2]
-            # Julia has 1-indexed arrays, the problem assumed 0-indexed
-            # arrays  and reversed order of the coordinates.
-            return "$(col-1),$(row-1)"
-        end
-    end
-
-    return nothing
+    maze, start, stop = data
+    return solve(maze, start, stop, 20, 100)
 end
 
 println(part1())
-# println(part2())
+println(part2())
