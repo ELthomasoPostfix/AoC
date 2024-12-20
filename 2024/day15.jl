@@ -2,7 +2,8 @@ CHR_BOX::Char = 'O'
 CHR_WALL::Char = '#'
 CHR_FREE::Char = '.'
 CHR_ROBOT::Char = '@'
-CHR_BOX_WIDE::Char = '['
+CHR_BOX_WL::Char = '['
+CHR_BOX_WR::Char = ']'
 CHR_UP::Char = '^'
 CHR_RIGHT::Char = '>'
 CHR_DOWN::Char = 'v'
@@ -40,24 +41,60 @@ function parse_input(file_path::String)
     return boxgrid, moves, robot
 end
 
-"""Return the position of the nearest '.' symbol, else nothing."""
-function findfree(pos::CartesianIndex, dir::CartesianIndex, matrix::Matrix{Char})
-    r, c = pos[1], pos[2]
-    h, w = size(matrix)
-    @assert (1 <= r <= h) && (1 <= c <= w) "Position out of bounds."
+"""Shove all boxes in the given direction one free space forwards.
 
-    while matrix[pos] != CHR_WALL
-        pos = pos + dir
-        if matrix[pos] == CHR_FREE
-            return pos
+    If any wall is in front of any of the attached boxes, then the
+    entire movement is nullified.
+"""
+function shove_boxes(positions::Array{CI}, dir::CI, matrix::Matrix{Char};
+                  depth::Int64=0) where CI <: CartesianIndex
+    move_is_vert::Bool = dir[2] == 0
+
+
+    # Free space found so that  all boxes seen until now can be moved one
+    # space, AND no walls were encountered to block this move.
+    # Note: If only free spaces remained, then the list must now be empty.
+    if isempty(positions)
+        return nothing
+    end
+
+    # Keep all to-search positions in the same line (lock-step)
+    # to detect the earliest wall blocking any box.
+    positions_next::Array{CartesianIndex{2}} = []
+    for pos in positions
+        next = pos + dir
+        if matrix[next] == CHR_BOX_WL && move_is_vert
+            push!(positions_next, next + MV_RIGHT)
+        elseif matrix[next] == CHR_BOX_WR && move_is_vert
+            push!(positions_next, next + MV_LEFT)
+        end
+        push!(positions_next, next)
+    end
+    # Avoid duplicate coordinates, they may clash when shifting grid contents.
+    positions_next = unique(positions_next)
+    # A free position does not contain a to-be-moved box.
+    # Each box is moved at most one free space, so we may immediately
+    # discard free space positions.
+    positions_next = [pos for pos in positions_next if matrix[pos] != CHR_FREE]
+
+    # Walls block all movement.
+    if any(==(CHR_WALL), matrix[positions_next])
+        return nothing
+    end
+
+    shove_boxes(positions_next, dir, matrix, depth=depth+1)
+
+    # If all positions ahead are free, then we can move all boxes one space.
+    if all(==(CHR_FREE), matrix[positions_next])
+        for pos in positions
+            pos_next = pos + dir
+            matrix[pos_next] = matrix[pos]
+            matrix[pos] = CHR_FREE
         end
     end
-    return nothing
 end
 
-function solve(data)
-    boxgrid, moves, robot = data
-
+function solve!(boxgrid, moves, robot, box_symbol::Char)
     mmap = Dict(
         CHR_UP    => MV_UP,
         CHR_RIGHT => MV_RIGHT,
@@ -69,49 +106,39 @@ function solve(data)
         dir = mmap[move]
         next = robot + dir
 
-        # Walls block any movement.
-        if boxgrid[next] == CHR_WALL
+        shove_boxes([robot],  dir, boxgrid)
+
+        # After pushing boxes, only move if you made room just now.
+        if boxgrid[next] != CHR_FREE
             continue
-        end
-        # If there is no free space until the neares wall, then do nothing.
-        free = findfree(robot,  dir, boxgrid)
-        if free === nothing
-            continue
-        end
-
-        # Avoid the case where there is no b
-        if boxgrid[next] == CHR_BOX
-            ran(c1::Int64, c2::Int64) = min(c1, c2):1:max(c1, c2)
-
-            # Tomfoolery because movement in a matrix is inverted compared to
-            # movement in a cartesian coordinate space.
-            ran_dir = dir
-            lastbox = free - ran_dir
-            tgt_start = next + ran_dir
-
-            row_ran_src = ran(next[1], lastbox[1])
-            row_ran_tgt = ran(tgt_start[1], free[1])
-            col_ran_src = ran(next[2], lastbox[2])
-            col_ran_tgt = ran(tgt_start[2], free[2])
-            boxgrid[row_ran_tgt, col_ran_tgt] .= boxgrid[row_ran_src, col_ran_src]
-            boxgrid[next] = CHR_FREE
         end
         robot = next
     end
 
-    boxes = findall(==(CHR_BOX), boxgrid)
+    boxes = findall(==(box_symbol), boxgrid)
     return sum([100*(box[1]-1) + box[2]-1 for box in boxes])
 end
 
 function part1()
     data = parse_input("./data15.txt")
-    return solve(data)
+    return solve!(data..., CHR_BOX)
 end
 
 function part2()
     data = parse_input("./data15.txt")
-    return solve(data)
+
+    boxgrid, moves, robot = data
+    widebot = CartesianIndex(robot[1], 2*robot[2] - 1)
+
+    h, w = size(boxgrid)
+    widegrid::Matrix{Char} = Matrix{Char}(undef, h, 2*w)
+    for (rowidx, row) in enumerate(eachrow(boxgrid))
+        widegrid[rowidx, 1:2:end] .= replace(row, CHR_BOX => CHR_BOX_WL)
+        widegrid[rowidx, 2:2:end] .= replace(row, CHR_BOX => CHR_BOX_WR)
+    end
+
+    return solve!(widegrid, moves, widebot, CHR_BOX_WL)
 end
 
 println(part1())
-# println(part2())
+println(part2())
