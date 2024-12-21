@@ -75,11 +75,9 @@ function transform(moves, pad)
     return moves
 end
 
-function part1()
-    data = parse_input("./data21.txt")
-
+function solve(data, num_dpads::Int64)
     codes, dpad, npad = data
-
+    
     #= The way we can impact the length of the output sequence is
       the order of vertical vs horizontal moves for each movement.
       e.g. when going from number 5 to 9, we have two options:
@@ -90,25 +88,28 @@ function part1()
       ('A', '<') which has grid distance 3. So direct movements on a dpad
       between the 'A' and '<' keys must be avoided.
     =#
+    @assert num_dpads < 15 "This implementation is way too slow for $num_dpads iterations."
     total::Int64 = 0
     for code in codes
         moves = transform(code, npad)
-        moves = transform(moves, dpad)
-        moves = transform(moves, dpad)
+        for i in 1:num_dpads
+            moves = transform(moves, dpad)
+        end
         
         total += length(moves) * parse(Int64, code[1:end-1])
     end
+    return total
+end
 
-    result = total
-    return result
+function part1()
+    data = parse_input("./data21.txt")
+    return solve(data, 2)
 end
 
 function part2()
     data = parse_input("./data21.txt")
-
-    result = data
-    return result
+    return solve(data, 25)
 end
 
 println(part1())
-# println(part2())
+println(part2())
