@@ -29,12 +29,12 @@ function parse_input(file_path::String)
 end
 
 function tomoves(start::CartesianIndex, stop::CartesianIndex,
-                 blank::CartesianIndex)
+                 blank::CartesianIndex; type=0)
     diff = stop - start
     hmoves::String = repeat(diff[2] > 0 ? '>' : '<', abs(diff[2]))
     vmoves::String = repeat(diff[1] > 0 ? 'v' : '^', abs(diff[1]))
 
-    #= Ensure the corner never resides outside the key/num pad.
+    #= Ensure the corner never resides outside the key/num pad:
         S    C1
 
         C2    E
@@ -42,18 +42,50 @@ function tomoves(start::CartesianIndex, stop::CartesianIndex,
     C1 = CartesianIndex(start[1], stop[2])
     C2 = CartesianIndex(stop[1], start[2])
 
-    if true # TODO: REMOVE CASE?
+    if type==0 # TODO: REMOVE CASE?
+        corner = C1
+        # At most one corner is blank; we must not pass through a blank.
+        if C1 == blank
+            corner = C2
+        # We can make a choice, to minimize/optimize the path length.
+        elseif C1 != blank && C2 != blank
+            @assert start[1] == C1[1] "Arbitrary assumption to make optimizations work: C1 is on the same row as the start."
+            @assert start[2] == C2[2] "Arbitrary assumption to make optimizations work: C2 is on the same col as the start."
+            # Avoid ending in '<'
+            # if CHR_L in hmoves
+            #     corner = C2
+            # Prefer ending in 'v'
+            if CHR_D in vmoves
+                corner = C2
+            end
+        end
+        # You MUST pass through the chosen corner!
+        # If the corner is on the same row, then you step into the corner by
+        # performing the horizontal moves first. Else, the corner must be in
+        # the same column, and you must perform the vertical moves first.
+        if corner[1] == start[1]
+            return hmoves * vmoves * "A"
+        else
+            return vmoves * hmoves * "A"
+        end
+    elseif type==1
+        corner = C1 == blank ? C2 : C1
+        if corner[1] == start[1]
+            return (hmoves, vmoves, "A")
+        end
+        return (vmoves, hmoves, "A")
+    elseif type==3
         corner = C1 == blank ? C2 : C1
         if corner[1] == start[1]
             return hmoves * vmoves * "A"
         end
         return vmoves * hmoves * "A"
     else
-        moves::Array{String} = []
+        moves = []
         if C1 != blank
             push!(moves, hmoves * vmoves * "A")
         end
-        if C2 != blank
+        if C2 != blank && !(C1[1] == C2[1] && C1[2] == C2[2])
             push!(moves, vmoves * hmoves * "A")
         end
         return moves
@@ -188,61 +220,87 @@ function entirely(code, npad, dpad)
     return length(moves) * parse(Int64, code[1:end-1])
 end
 
+function transform(moves, pad)
+    blank = pad[CHR_BLANK]
+    destinations = [pad[c] for c in moves]
+    sources = vcat(pad['A'], destinations[1:end-1])
+    moves = tomoves.(sources, destinations, (blank,))
+    println(moves)
+    moves = [*(t...) for t in moves]
+    moves = string(moves...)
+    return moves
+end
+
 function part1()
     data = parse_input("./data21.txt")
 
     codes, dpad, npad = data
-    nblank = npad[CHR_BLANK]
-    dblank = dpad[CHR_BLANK]
 
     of = open("out.txt", "w")
     
+    #= The way we can impact the length of the output sequence is
+      the order of vertical vs horizontal moves for each movement.
+      e.g. when going from number 5 to 9, we have two options:
+          >>^^  OR  ^^>>
+      The same holds for the directional key pads (dpads).
+      Only the dpads can see any redundant movements.
+      All dpad key pairs have a grid distance of 1 or 2, except the pair
+      ('A', '<') which has grid distance 3. So direct movements on a dpad
+      between the 'A' and '<' keys must be avoided.
+    =#
+    # TODO: Can we somehow reorder the moves to 
     total::Int64 = 0
     for code in codes
-        # CI = CartesianIndex
-        # pqueue = PriorityQueue{Tuple{String, CI, CI, CI, String}, Int64}()
-        # enqueue!(pqueue, (code, "", npad['A'], dpad['A'], dpad['A']), length(code))
-
-        # moves_shortest::String = ""
-        # while !isempty(pqueue)
-        #     code_rem, moves, np, dp1, dp2 = dequeue!(pqueue)
-
-
-        #     if isempty(code_rem)
-        #         moves_shortest = moves
-        #         break
-        #     end
-
-        #     c = code_rem[end]
-        #     code_rem = code_rem[1:end-1]
-
-        # end
-
-
-
-        # destinations = [npad[c] for c in code]
-        # sources = vcat(npad['A'], destinations[1:end-1])
-        # moves = tomoves.(sources, destinations, (nblank,))
-        # moves = string(moves...)
+        moves = transform(code, npad)
+        moves = transform(moves, dpad)
+        # l = ["^>A", ">vA"]; moves = string(l...)
+        moves = transform(moves, dpad)
         
-        # destinations = [dpad[c] for c in moves]
-        # sources = vcat(dpad['A'], destinations[1:end-1])
-        # moves = tomoves.(sources, destinations, (dblank,))
-        # moves = string(moves...)
+        total += length(moves) * parse(Int64, code[1:end-1])
         
-        # destinations = [dpad[c] for c in moves]
-        # sources = vcat(dpad['A'], destinations[1:end-1])
-        # moves = tomoves.(sources, destinations, (dblank,))
-        # moves = string(moves...)
-
-        # total += length(moves) * parse(Int64, code[1:end-1])
-        total += entirely(code, npad, dpad) # TODO: DELETE, DELETE
-
-        # println("$code: $moves")
-        # println("$(length(moves)) * $(parse(Int64, code[1:end-1]))")
-        # println("sim=$(simulate(moves, npad, dpad, of=of))")
-        # println()
+        println("$code: $moves")
+        println("$(length(moves)) * $(parse(Int64, code[1:end-1]))")
+        # return
+        println("sim=$(simulate(moves, npad, dpad, of=of))")
+        println()
     end
+
+
+    # nblank = npad[CHR_BLANK]
+    # dblank = dpad[CHR_BLANK]
+
+    # total::Int64 = 0
+    # for code in codes
+    #     destinations = [npad[c] for c in code]
+    #     sources = vcat(npad['A'], destinations[1:end-1])
+    #     moves = tomoves.(sources, destinations, (nblank,))
+    #     # moves = [moves[1]] # TODO: DELETE DELETE
+    #     println(moves)
+    #     moves = [*(t...) for t in moves]
+    #     moves = string(moves...)
+        
+    #     destinations = [dpad[c] for c in moves]
+    #     sources = vcat(dpad['A'], destinations[1:end-1])
+    #     moves = tomoves.(sources, destinations, (dblank,))
+    #     println(moves)
+    #     moves = [*(t...) for t in moves]
+    #     moves = string(moves...)
+
+    #     destinations = [dpad[c] for c in moves]
+    #     sources = vcat(dpad['A'], destinations[1:end-1])
+    #     moves = tomoves.(sources, destinations, (dblank,))
+    #     println(moves)
+    #     moves = [*(t...) for t in moves]
+    #     moves = string(moves...)
+
+    #     total += length(moves) * parse(Int64, code[1:end-1])
+    #     # total += entirely(code, npad, dpad) # TODO: DELETE, DELETE
+
+    #     println("$code: $moves")
+    #     println("$(length(moves)) * $(parse(Int64, code[1:end-1]))")
+    #     println("sim=$(simulate(moves, npad, dpad, of=of))")
+    #     println()
+    # end
 
     # total::Int64 = 0
     # for code in codes
