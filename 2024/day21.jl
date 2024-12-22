@@ -50,8 +50,11 @@ function tomoves(start::CartesianIndex, stop::CartesianIndex,
     elseif C1 != blank && C2 != blank
         @assert start[1] == C1[1] "Arbitrary assumption to make optimizations work: C1 is on the same row as the start."
         @assert start[2] == C2[2] "Arbitrary assumption to make optimizations work: C2 is on the same col as the start."
+        # Avoid ending in '<'
+        if CHR_L in hmoves
+            corner = C1
         # Prefer ending in 'v'
-        if CHR_D in vmoves
+        elseif CHR_D in vmoves
             corner = C2
         end
     end
@@ -66,13 +69,50 @@ function tomoves(start::CartesianIndex, stop::CartesianIndex,
     end
 end
 
-function transform(moves, pad)
+function transform(move::Char, pad, src)
+    return transform(string(move), pad, src)
+end
+
+function transform(moves::String, pad, src)
     blank = pad[CHR_BLANK]
     destinations = [pad[c] for c in moves]
-    sources = vcat(pad['A'], destinations[1:end-1])
+    sources = vcat(src, destinations[1:end-1])
     moves = tomoves.(sources, destinations, (blank,))
     moves = string(moves...)
-    return moves
+    return moves, destinations[end]
+end
+
+function transform_dpads(moves::String, positions, pad, cache; dpad_idx::Int64=1)::Int64
+    @assert 1 <= dpad_idx <= length(positions) "Invalid dpads index."
+
+
+    # println("      dpi=$dpad_idx | $(length(moves))")
+
+    srcs = positions[dpad_idx:end]
+    key = (moves, srcs, dpad_idx)
+    # TODO: forgot to check all sources and update all destinations!!!!!
+    cached = get(cache, key, nothing)
+    if cached !== nothing
+        positions[dpad_idx:end] .= cached[2]
+        return cached[1]
+    end
+
+    moves, dst = transform(moves, pad, positions[dpad_idx])
+    positions[dpad_idx] = dst
+
+    # Base case: All dpads have performed transitions, push up this substring's
+    # length for aggregation.
+    if dpad_idx == length(positions)
+        return length(moves)
+    end
+
+    STEP::Int64 = 20
+    result = sum([
+        transform_dpads(moves[sidx:min(end, sidx+STEP-1)], positions, pad, cache, dpad_idx=dpad_idx+1)
+        for sidx in 1:STEP:length(moves)
+    ])
+    cache[key] = (result, copy(positions[dpad_idx:end]))
+    return result
 end
 
 function solve(data, num_dpads::Int64)
@@ -88,15 +128,34 @@ function solve(data, num_dpads::Int64)
       ('A', '<') which has grid distance 3. So direct movements on a dpad
       between the 'A' and '<' keys must be avoided.
     =#
-    @assert num_dpads < 15 "This implementation is way too slow for $num_dpads iterations."
     total::Int64 = 0
     for code in codes
-        moves = transform(code, npad)
-        for i in 1:num_dpads
-            moves = transform(moves, dpad)
+        println(code)
+        positions::Array{CartesianIndex} =
+        vcat(npad['A'], fill(dpad['A'], num_dpads))
+        for c in code
+            println("    $c")
+            moves, dst = transform(c, npad, positions[1])
+            positions[1] = dst
+
+            if false
+                @assert num_dpads < 15 "This implementation is way too slow for $num_dpads iterations."
+                for idx in 1:num_dpads
+                    println("      dpad=$idx")
+                    moves, dst = transform(moves, dpad, positions[idx+1])
+                    positions[idx+1] = dst
+                end
+
+                total += length(moves) * parse(Int64, code[1:end-1])
+            else
+                # A slice view is editable AND functions as a valid array pointer,
+                # as opposed to a non-view slice.
+                cache = Dict()
+                dpad_positions = @view positions[2:end]
+                total += transform_dpads(moves, dpad_positions, dpad, cache) * parse(Int64, code[1:end-1])
+            end
+
         end
-        
-        total += length(moves) * parse(Int64, code[1:end-1])
     end
     return total
 end
