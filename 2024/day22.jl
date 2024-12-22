@@ -50,9 +50,8 @@ function part2()
 
     profits::Dict = Dict()
     buy_prices = getindex.(solve.(data, 2000), 2)
-    # Add up the first-occurrence buy price for every individual,
-    # length 4 change slice.
-    mergewith!.(+, (profits,), buy_prices)
+    # Aggregate the first-occurrence buy price per length 4 change slice.
+    mergewith!(+, profits, buy_prices...)
 
     return maximum(values(profits))
 end
