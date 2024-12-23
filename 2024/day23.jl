@@ -23,6 +23,7 @@ end
 function part1()
     data = parse_input("./data23.txt")
 
+    # TODO: Solve using k-cliques
     triangles::Set = Set()
     for p1 in keys(data)
         # We only care about triangles containing a name starting in 't'.
@@ -49,7 +50,7 @@ end
 function part2()
     data = parse_input("./data23.txt")
 
-
+    # TODO: Solve using k-cliques
     groups = []
     for p1 in keys(data)
         # Note: WE DONT CARE ABOUT 't' BEING IN A NAME ANYMORE.
